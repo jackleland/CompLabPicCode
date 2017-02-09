@@ -3,7 +3,7 @@
 # Electrostatic PIC code in a 1D cyclic domain
 
 from numpy import arange, concatenate, zeros, linspace, floor, array, pi
-from numpy import sin, cos, sqrt, random, histogram, mean, bincount
+from numpy import sin, cos, sqrt, random, histogram, mean, divide, where
 import time as t
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
@@ -49,27 +49,32 @@ def calc_density(position, ncells, L):
     
     dx = L / ncells       # Uniform cell spacing
 
-    pos = position / dx
-    pos.sort()
-    cellnum = floor(pos).astype(int)
-    relpos = pos - cellnum
-    relposinv = 1 - relpos
-    counts = bincount(cellnum)
-        
-    p_hi = 0
-    p_lo = 0
+    pos = divide(position, dx)
     
     for i in range(ncells):
-        p_lo = p_hi
-        p_hi = p_hi + counts[i] - 1
-        density[i] += sum(relposinv[p_lo:p_hi])
-        density[(i+1)%ncells] += sum(relpos[p_lo:p_hi])
+        j = (i+1)%ncells
+        sumrange = where( (pos >= i) & (pos < i+1) )
+        density[i] = density[i] + sum(pos[sumrange] ) - i*len(sumrange[0])
+        density[j] = density[j] + (i+1)*len(sumrange[0]) - sum(pos[sumrange] )
+#    cellnum = floor(pos).astype(int)
+#    relpos = pos - cellnum
+#    relposinv = 1 - relpos
+#    
+#    # counts the number of particles in each cell and allows them to be summed over
+#    # as the pos list is sorted. This falls down if either end cell is empty.
+#    counts = bincount(cellnum)
+#        
+#    p_hi = 0
+#    p_lo = 0
+#    
+#    for i in range(ncells):
+#        p_lo = p_hi
+#        p_hi = p_hi + counts[i]
+#        # not using += because it is slower
+#        density[i] = density[i] + sum(relposinv[p_lo:p_hi])
+#        density[(i+1)%ncells] = density[(i+1)%ncells] + sum(relpos[p_lo:p_hi])
     
-#    for cell in range(0,ncells):
-#        print(cell)
-#        offset = (psum[cell]/count[cell]) - cell    # Offset of averaged super particle from the left
-#        density[cell] += 1. - offset
-#        density[(cell + 1) % ncells] += offset
+
         
     # nparticles now distributed amongst ncells
     density *= float(ncells) / float(nparticles)  # Make average density equal to 1
@@ -224,8 +229,8 @@ class Plot:
             
             self.fig = plt.figure()
             self.vel_plot = plt.plot(vhist, vbins)[0]
-        plt.ion()
-        plt.show()
+#        plt.ion()
+#        plt.show()
         
     def __call__(self, pos, vel, ncells, L, t):
         d = calc_density(pos, ncells, L)
@@ -235,8 +240,8 @@ class Plot:
         self.phase_plot.set_data(pos, vel) # Update the plot
         self.density_plot.set_data(linspace(0, L, ncells), d)
         self.vel_plot.set_data(vhist, vbins)
-        plt.draw()
-        plt.pause(0.05)
+#        plt.draw()
+#        plt.pause(0.05)
         
 
 class Summary:
@@ -292,40 +297,61 @@ def twostream(npart, L, vbeam=2):
 
 ####################################################################
 
-if __name__ == "__main__":
+def setup(mode=1, npart=10000, ncells=20, L = 4.*pi):
     # Generate initial condition
     #
-    if False:
-        # 2-stream instability
+    if (mode == 0):
+        # 2-stream instability mode
         L = 100
         ncells = 20
         npart = 10000
         pos, vel = twostream(npart, L, 3.)
-    else:
-        # Landau damping
+    elif (mode == 1):
+        # Landau damping mode
         L = 4.*pi
         ncells = 20
-        npart = 100000
+        npart = 10000
         pos, vel = landau(npart, L)
+    elif (mode == 2):
+        # Landau damping custom mode
+        pos, vel = landau(npart, L)
+    else:
+        pos, vel = landau(npart, L)
+
     
     # Create some output classes
-    p = Plot(pos, vel, ncells, L) # This displays an animated figure
-    s = Summary()                 # Calculates, stores and prints summary info
+#    p = Plot(pos, vel, ncells, L) # This displays an animated figure
+#    s = Summary()                 # Calculates, stores and prints summary info
     
     # Run the simulation
+    begintime = t.clock()
     pos, vel = run(pos, vel, L, ncells, 
-                   out=[p, s],                      # These are called each output
-                   output_times=linspace(0.,20,50)) # The times to output
+#                   out=[p, s],                      # These are called each output
+                   output_times=linspace(0.,30,100)) # The times to output
+    endtime = t.clock()
     
     # Summary stores an array of the first-harmonic amplitude
     # Make a semilog plot to see exponential damping
-    plt.figure()
-    plt.plot(s.t, s.firstharmonic)
-    plt.xlabel("Time [Normalised]")
-    plt.ylabel("First harmonic amplitude [Normalised]")
-    plt.yscale('log')
+#    plt.figure()
+#    plt.plot(s.t, s.firstharmonic)
+#    plt.xlabel("Time [Normalised]")
+#    plt.ylabel("First harmonic amplitude [Normalised]")
+#    plt.yscale('log')
+#    
+#    plt.ioff() # This so that the windows stay open
+##    plt.show()
+    return endtime-begintime
     
+
+if __name__ == "__main__": 
+    data = [[],[]]
+    for i in range(20):
+        data[0].append(5000*(i+1))
+        data[1].append(setup(2,5000*(i+1)))
+    
+    plt.figure()
+    plt.plot(data[0],data[1])
+    plt.xlabel("$N_{part}$")
+    plt.ylabel("Simulation Time (seconds)")    
     plt.ioff() # This so that the windows stay open
     plt.show()
-    
-    
