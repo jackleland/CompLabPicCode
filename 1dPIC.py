@@ -2,9 +2,10 @@
 #
 # Electrostatic PIC code in a 1D cyclic domain
 
-from numpy import arange, concatenate, zeros, linspace, floor, array, pi
-from numpy import sin, cos, sqrt, random, histogram, mean, divide, where
+import numpy as np
 import time as t
+import scipy.signal as spy
+import ffunctions as ff
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
 
@@ -20,6 +21,15 @@ try:
 except:
     # No SciPy FFT routine. Import NumPy routine instead
     from numpy.fft import fft, ifft
+
+def firstMin(arr):
+    mint = arr[0]
+    for i in range(len(arr)):
+        if mint < arr[i]:
+            return i - 1
+        else:
+            mint = arr[i]
+        
 
 def rk4step(f, y0, dt, args=()):
     """ Takes a single step using RK4 method """
@@ -44,16 +54,16 @@ def calc_density(position, ncells, L):
     """
     # This is a crude method and could be made more efficient
     
-    density = zeros([ncells])
+    density = np.zeros([ncells])
     nparticles = len(position)
     
     dx = L / ncells       # Uniform cell spacing
 
-    pos = divide(position, dx)
+    pos = np.divide(position, dx)
     
     for i in range(ncells):
         j = (i+1)%ncells
-        sumrange = where( (pos >= i) & (pos < i+1) )
+        sumrange = np.where( (pos >= i) & (pos < i+1) )
         density[i] = density[i] + sum(pos[sumrange] ) - i*len(sumrange[0])
         density[j] = density[j] + (i+1)*len(sumrange[0]) - sum(pos[sumrange] )
 #    cellnum = floor(pos).astype(int)
@@ -95,8 +105,8 @@ def periodic_interp(y, x):
     """
     ny = len(y)
     if len(x) > 1:
-        y = array(y) # Make sure it's a NumPy array for array indexing
-    xl = floor(x).astype(int) # Left index
+        y = np.array(y) # Make sure it's a NumPy array for array indexing
+    xl = np.floor(x).astype(int) # Left index
     dx = x - xl
     xl = ((xl % ny) + ny) % ny  # Ensures between 0 and ny-1 inclusive
     return y[xl]*(1. - dx) + y[(xl+1)%ny]*dx
@@ -112,10 +122,10 @@ def fft_integrate(y):
     # n odd:  [ f(0), f(1), ... f((n-1)/2), f(-(n-1)/2) ... f(-1) ]
     
     if n % 2 == 0: # If an even number of points
-        k = concatenate( (arange(0, n/2+1), arange(1-n/2, 0)) )
+        k = np.concatenate( (np.arange(0, n/2+1), np.arange(1-n/2, 0)) )
     else:
-        k = concatenate( (arange(0, (n-1)/2+1), arange( -(n-1)/2, 0)) )
-    k = 2.*pi*k/n
+        k = np.concatenate( (np.arange(0, (n-1)/2+1), np.arange( -(n-1)/2, 0)) )
+    k = 2.*np.pi*k/n
     
     # Modify frequencies by dividing by ik
     f[1:] /= (1j * k[1:]) 
@@ -149,18 +159,18 @@ def pic(f, ncells, L):
     accel = -periodic_interp(E, pos/dx)
 
     # Put back into a single array
-    return concatenate( (vel, accel) )
+    return np.concatenate( (vel, accel) )
 
 ####################################################################
 
-def run(pos, vel, L, ncells=None, out=[], output_times=linspace(0,20,100), cfl=0.5):
+def run(pos, vel, L, ncells=None, out=[], output_times=np.linspace(0,20,100), cfl=0.5):
     
     if ncells == None:
-        ncells = int(sqrt(len(pos))) # A sensible default
+        ncells = int(np.sqrt(len(pos))) # A sensible default
 
     dx = L / float(ncells)
     
-    f = concatenate( (pos, vel) )   # Starting state
+    f = np.concatenate( (pos, vel) )   # Starting state
     nparticles = len(pos)
     begintime = t.clock()    
     
@@ -204,7 +214,7 @@ class Plot:
     def __init__(self, pos, vel, ncells, L):
         
         d = calc_density(pos, ncells, L)
-        vhist, bins  = histogram(vel, int(sqrt(len(vel))))
+        vhist, bins  = np.histogram(vel, int(np.sqrt(len(vel))))
         vbins = 0.5*(bins[1:]+bins[:-1])
         
         # Plot initial positions
@@ -216,7 +226,7 @@ class Plot:
             ax.set_title("Phase space")
             
             ax = self.fig.add_subplot(self.gs[3,0:3])
-            self.density_plot = ax.plot(linspace(0, L, ncells), d)[0]
+            self.density_plot = ax.plot(np.linspace(0, L, ncells), d)[0]
             
             ax = self.fig.add_subplot(self.gs[0:3,3])
             self.vel_plot = ax.plot(vhist, vbins)[0]
@@ -225,7 +235,7 @@ class Plot:
             self.phase_plot = plt.plot(pos, vel, '.')[0]
             
             self.fig = plt.figure()
-            self.density_plot = plt.plot(linspace(0, L, ncells), d)[0]
+            self.density_plot = plt.plot(np.linspace(0, L, ncells), d)[0]
             
             self.fig = plt.figure()
             self.vel_plot = plt.plot(vhist, vbins)[0]
@@ -234,11 +244,11 @@ class Plot:
         
     def __call__(self, pos, vel, ncells, L, t):
         d = calc_density(pos, ncells, L)
-        vhist, bins  = histogram(vel, int(sqrt(len(vel))))
+        vhist, bins  = np.histogram(vel, int(np.sqrt(len(vel))))
         vbins = 0.5*(bins[1:]+bins[:-1])
         
         self.phase_plot.set_data(pos, vel) # Update the plot
-        self.density_plot.set_data(linspace(0, L, ncells), d)
+        self.density_plot.set_data(np.linspace(0, L, ncells), d)
         self.vel_plot.set_data(vhist, vbins)
 #        plt.draw()
 #        plt.pause(0.05)
@@ -272,22 +282,23 @@ def landau(npart, L, alpha=0.2):
     
     """
     # Start with a uniform distribution of positions
-    pos = random.uniform(0., L, npart)
+    pos = np.random.uniform(0., L, npart)
     pos0 = pos.copy()
-    k = 2.*pi / L
+    k = 2.*np.pi / L
     for i in range(10): # Adjust distribution using Newton iterations
-        pos -= ( pos + alpha*sin(k*pos)/k - pos0 ) / ( 1. + alpha*cos(k*pos) )
+        pos -= ( pos + alpha*np.sin(k*pos)/k - pos0 ) / ( 1. + alpha*np.cos(k*pos) )
         
     # Normal velocity distribution
-    vel = random.normal(0.0, 1.0, npart)
+    vel = np.random.normal(0.0, 1.0, npart)
     
     return pos, vel
 
+
 def twostream(npart, L, vbeam=2):
     # Start with a uniform distribution of positions
-    pos = random.uniform(0., L, npart)
+    pos = np.random.uniform(0., L, npart)
     # Normal velocity distribution
-    vel = random.normal(0.0, 1.0, npart)
+    vel = np.random.normal(0.0, 1.0, npart)
     
     np2 = int(npart / 2)
     vel[:np2] += vbeam  # Half the particles moving one way
@@ -295,9 +306,10 @@ def twostream(npart, L, vbeam=2):
     
     return pos,vel
 
+
 ####################################################################
 
-def setup(mode=1, npart=10000, ncells=20, L = 4.*pi):
+def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     # Generate initial condition
     #
     if (mode == 0):
@@ -308,9 +320,9 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*pi):
         pos, vel = twostream(npart, L, 3.)
     elif (mode == 1):
         # Landau damping mode
-        L = 4.*pi
+        L = 4.*np.pi
         ncells = 20
-        npart = 10000
+        npart = 20000
         pos, vel = landau(npart, L)
     elif (mode == 2):
         # Landau damping custom mode
@@ -320,38 +332,70 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*pi):
 
     
     # Create some output classes
-#    p = Plot(pos, vel, ncells, L) # This displays an animated figure
-#    s = Summary()                 # Calculates, stores and prints summary info
+    p = Plot(pos, vel, ncells, L) # This displays an animated figure
+    s = Summary()                 # Calculates, stores and prints summary info
     
     # Run the simulation
     begintime = t.clock()
     pos, vel = run(pos, vel, L, ncells, 
-#                   out=[p, s],                      # These are called each output
-                   output_times=linspace(0.,30,100)) # The times to output
+                   out=[p, s],                      # These are called each output
+                   output_times=np.linspace(0.,20,100)) # The times to output
     endtime = t.clock()
+    
+    # Peak finding
+    tArr = np.array(s.t)
+    fh = np.array(s.firstharmonic)
+    peaks = spy.argrelmax(fh)
+    
+    # Limit to landau daming regime
+    lPeaks = peaks[0][0:firstMin(fh[peaks])+1]
+    lPeaks = np.insert(lPeaks,0,0)
+    
     
     # Summary stores an array of the first-harmonic amplitude
     # Make a semilog plot to see exponential damping
-#    plt.figure()
-#    plt.plot(s.t, s.firstharmonic)
-#    plt.xlabel("Time [Normalised]")
-#    plt.ylabel("First harmonic amplitude [Normalised]")
-#    plt.yscale('log')
-#    
-#    plt.ioff() # This so that the windows stay open
-##    plt.show()
+    plt.figure()
+    plt.plot(s.t, s.firstharmonic)
+    plt.plot(tArr[lPeaks],fh[lPeaks],'x')
+    plt.xlabel("Time [Normalised]")
+    plt.ylabel("First harmonic amplitude [Normalised]")
+    plt.yscale('log')
+    
+    plt.ioff() # This so that the windows stay open
+    plt.show()
     return endtime-begintime
     
 
-if __name__ == "__main__": 
+def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
     data = [[],[]]
-    for i in range(20):
-        data[0].append(5000*(i+1))
-        data[1].append(setup(2,5000*(i+1)))
+    for i in range(n):
+        data[0].append(scalefactor*(i+1))
+        data[1].append(setup(2,scalefactor*(i+1),Ncell))
     
     plt.figure()
     plt.plot(data[0],data[1])
     plt.xlabel("$N_{part}$")
-    plt.ylabel("Simulation Time (seconds)")    
+    plt.ylabel("Simulation Time (seconds)")  
+    plt.title("Simulation Time as a Function of $N_{part}$")
     plt.ioff() # This so that the windows stay open
     plt.show()
+    
+def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
+    data = [[],[]]
+    for i in range(n):
+        data[0].append(scalefactor*(i+1))
+        data[1].append(setup(2,Npart,scalefactor*(i+1)))
+    
+    plt.figure()
+    plt.plot(data[0],data[1])
+    plt.xlabel("$N_{cell}$")
+    plt.ylabel("Simulation Time (seconds)")   
+    plt.title("Simulation Time as a Function of $N_{cell}$")
+    plt.ioff() # This so that the windows stay open
+    plt.show()
+ 
+ 
+####################################################################
+   
+if __name__ == "__main__":
+    setup()
