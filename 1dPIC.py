@@ -5,6 +5,7 @@
 import numpy as np
 import time as t
 import scipy.signal as spy
+from scipy.optimize import curve_fit
 import ffunctions as ff
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
@@ -321,8 +322,8 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     elif (mode == 1):
         # Landau damping mode
         L = 4.*np.pi
-        ncells = 20
-        npart = 20000
+        ncells = 40
+        npart = 10000
         pos, vel = landau(npart, L)
     elif (mode == 2):
         # Landau damping custom mode
@@ -332,38 +333,62 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
 
     
     # Create some output classes
-    p = Plot(pos, vel, ncells, L) # This displays an animated figure
+#    p = Plot(pos, vel, ncells, L) # This displays an animated figure
     s = Summary()                 # Calculates, stores and prints summary info
     
     # Run the simulation
     begintime = t.clock()
     pos, vel = run(pos, vel, L, ncells, 
-                   out=[p, s],                      # These are called each output
+                   out=[s],                      # These are called each output
                    output_times=np.linspace(0.,20,100)) # The times to output
     endtime = t.clock()
     
+    # ANALYSIS #
     # Peak finding
     tArr = np.array(s.t)
     fh = np.array(s.firstharmonic)
     peaks = spy.argrelmax(fh)
     
-    # Limit to landau daming regime
-    lPeaks = peaks[0][0:firstMin(fh[peaks])+1]
+    # Limit to landau damping regime
+    cutoffPIndex = firstMin(fh[peaks])+1
+    cutoff = peaks[0][cutoffPIndex]
+
+    lPeaks = peaks[0][0:cutoffPIndex]
     lPeaks = np.insert(lPeaks,0,0)
+    lPeakTimes = tArr[lPeaks]
+    dampingRegion = fh[0:cutoff]
+    noiseRegion = fh[cutoff:] 
+    avNoise = np.mean(noiseRegion)
+    avNoiseD = np.std(noiseRegion)/np.sqrt(len(noiseRegion))
+    avNoiseFit = np.zeros(len(noiseRegion))+avNoise
     
+    # Fitting curve to peaks
+    guess = [1,1]
+    popt, pcov = curve_fit(ff.exponential,tArr[lPeaks],fh[lPeaks],p0=guess)
+    fit  = ff.exponential(tArr[0:cutoff+1],*popt)
+    ff.printParams(guess,popt,pcov,"Landau Damping Rate")
     
     # Summary stores an array of the first-harmonic amplitude
     # Make a semilog plot to see exponential damping
-    plt.figure()
-    plt.plot(s.t, s.firstharmonic)
-    plt.plot(tArr[lPeaks],fh[lPeaks],'x')
-    plt.xlabel("Time [Normalised]")
-    plt.ylabel("First harmonic amplitude [Normalised]")
-    plt.yscale('log')
-    
-    plt.ioff() # This so that the windows stay open
-    plt.show()
-    return endtime-begintime
+#    plt.figure()
+#    # plot damping curve
+#    plt.plot(tArr, fh, color='b')    
+#    # plot position of peaks in damping region
+#    plt.plot(tArr[lPeaks],fh[lPeaks],'x')
+#    # plot fit for daming region
+#    plt.plot(tArr[0:cutoff+1],fit,color='g')
+#    # plot average noise in noise region
+#    plt.plot(tArr[cutoff:],avNoiseFit,color='g')
+#    # plot cutoff point between regions
+#    plt.axvline(tArr[cutoff],linewidth=1, color='r')
+#    
+#    plt.xlabel("Time [Normalised]")
+#    plt.ylabel("First harmonic amplitude [Normalised]")
+#    plt.yscale('log')
+#    
+#    plt.ioff() # This so that the windows stay open
+#    plt.show()
+    return [tArr, fh, endtime-begintime, avNoise, avNoiseD, lPeakTimes, popt, pcov ]
     
 
 def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
@@ -398,4 +423,30 @@ def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
 ####################################################################
    
 if __name__ == "__main__":
-    setup()
+    data = [[],[],[]]
+    plt.figure()
+    for i in range(5):
+        [tArr, fh, time, A_n, dA_n, pt, params, cov] = setup()
+    #    plt.plot(np.pi/pt[1:])
+        w2 = np.pi/pt[1]
+        a = pt[1:]-pt[0:-1]
+        b = a[np.where(a > np.mean(a)*0.8)]
+        w = (np.pi)/(np.mean(b))
+        dw = np.std(b)/np.sqrt(len(b))
+        g = params[1]
+        dg = np.sqrt(cov[1][1])
+#        print("w = ",w," +/- ",dw)    
+#        print("g = ",g," +/- ",dg)
+#        print("A_n = ",A_n," +/- ",dA_n)
+        data[0].append(w)
+        data[1].append(g)
+        data[2].append(A_n)
+        plt.plot(tArr,fh)
+    
+    plt.xlabel("Time [Normalised]")
+    plt.ylabel("First harmonic amplitude [Normalised]")
+    plt.yscale('log')
+        
+    
+    
+    
