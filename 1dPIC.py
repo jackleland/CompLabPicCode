@@ -23,6 +23,10 @@ except:
     # No SciPy FFT routine. Import NumPy routine instead
     from numpy.fft import fft, ifft
 
+def standardError(arr):
+    return np.std(arr)/np.sqrt(len(arr))
+
+
 def firstMin(arr):
     mint = arr[0]
     for i in range(len(arr)):
@@ -322,8 +326,8 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     elif (mode == 1):
         # Landau damping mode
         L = 4.*np.pi
-        ncells = 40
-        npart = 10000
+        ncells = 20
+        npart = 200000
         pos, vel = landau(npart, L)
     elif (mode == 2):
         # Landau damping custom mode
@@ -368,6 +372,8 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     fit  = ff.exponential(tArr[0:cutoff+1],*popt)
     ff.printParams(guess,popt,pcov,"Landau Damping Rate")
     
+    chi = np.sum((fh[lPeaks] - fit[lPeaks])**2/fit[lPeaks])
+    
     # Summary stores an array of the first-harmonic amplitude
     # Make a semilog plot to see exponential damping
 #    plt.figure()
@@ -388,7 +394,7 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
 #    
 #    plt.ioff() # This so that the windows stay open
 #    plt.show()
-    return [tArr, fh, endtime-begintime, avNoise, avNoiseD, lPeakTimes, popt, pcov ]
+    return [tArr, fh, endtime-begintime, avNoise, avNoiseD, lPeakTimes, popt, pcov, chi ]
     
 
 def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
@@ -423,10 +429,11 @@ def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
 ####################################################################
    
 if __name__ == "__main__":
-    data = [[],[],[]]
+    vals = [[],[],[]]
+    data = []
     plt.figure()
     for i in range(5):
-        [tArr, fh, time, A_n, dA_n, pt, params, cov] = setup()
+        [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = setup()
     #    plt.plot(np.pi/pt[1:])
         w2 = np.pi/pt[1]
         a = pt[1:]-pt[0:-1]
@@ -438,14 +445,26 @@ if __name__ == "__main__":
 #        print("w = ",w," +/- ",dw)    
 #        print("g = ",g," +/- ",dg)
 #        print("A_n = ",A_n," +/- ",dA_n)
-        data[0].append(w)
-        data[1].append(g)
-        data[2].append(A_n)
+        vals[0].append(w)
+        vals[1].append(g)
+        vals[2].append(a_n)
+        data.append(fh)
         plt.plot(tArr,fh)
     
+    plt.plot(tArr, np.mean(data,0), color='k', lw=1.5)
     plt.xlabel("Time [Normalised]")
     plt.ylabel("First harmonic amplitude [Normalised]")
     plt.yscale('log')
+    
+    W = np.mean(vals[0])
+    dW = standardError(vals[0])
+    G = np.mean(vals[1])
+    dG = standardError(vals[1])
+    A_n = np.mean(vals[2])
+    dA_n = standardError(vals[2])
+    print("w = ",W," +/- ",dW)    
+    print("g = ",G," +/- ",dG)
+    print("A_n = ",A_n," +/- ",dA_n)
         
     
     
