@@ -7,6 +7,7 @@ import time as t
 import scipy.signal as spy
 from scipy.optimize import curve_fit
 import ffunctions as ff
+import csv 
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
 
@@ -34,6 +35,7 @@ def firstMin(arr):
             return i - 1
         else:
             mint = arr[i]
+    return None
         
 
 def rk4step(f, y0, dt, args=()):
@@ -271,7 +273,7 @@ class Summary:
         # Amplitude of the first harmonic
         fh = 2.*abs(fft(d)[1]) / float(ncells)
         
-        print "Time:", t, "First:", fh
+#        print "Time:", t, "First:", fh
         
         self.t.append(t)
         self.firstharmonic.append(fh)
@@ -335,23 +337,29 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     else:
         pos, vel = landau(npart, L)
 
-    
-    # Create some output classes
-#    p = Plot(pos, vel, ncells, L) # This displays an animated figure
-    s = Summary()                 # Calculates, stores and prints summary info
-    
-    # Run the simulation
-    begintime = t.clock()
-    pos, vel = run(pos, vel, L, ncells, 
-                   out=[s],                      # These are called each output
-                   output_times=np.linspace(0.,20,100)) # The times to output
-    endtime = t.clock()
-    
-    # ANALYSIS #
-    # Peak finding
-    tArr = np.array(s.t)
-    fh = np.array(s.firstharmonic)
-    peaks = spy.argrelmax(fh)
+    isNoiseFound = False
+        
+    # repeat run until a noise region is found successfully
+    while (not isNoiseFound):
+        # Create some output classes
+#        p = Plot(pos, vel, ncells, L) # This displays an animated figure    
+        s = Summary()                 # Calculates, stores and prints summary info
+        
+        # Run the simulation
+        begintime = t.clock()
+        pos, vel = run(pos, vel, L, ncells, 
+                       out=[s],                      # These are called each output
+                       output_times=np.linspace(0.,20,100)) # The times to output
+        endtime = t.clock()
+        
+        # ANALYSIS #
+        # Peak finding
+        tArr = np.array(s.t)
+        fh = np.array(s.firstharmonic)
+        peaks = spy.argrelmax(fh)
+        
+        isNoiseFound = (firstMin(fh[peaks]) is not None)
+        
     
     # Limit to landau damping regime
     cutoffPIndex = firstMin(fh[peaks])+1
@@ -424,16 +432,12 @@ def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
     plt.title("Simulation Time as a Function of $N_{cell}$")
     plt.ioff() # This so that the windows stay open
     plt.show()
- 
- 
-####################################################################
-   
-if __name__ == "__main__":
+    
+def run5Analysis(nCell, nPart):
     vals = [[],[],[]]
-    data = []
-    plt.figure()
+#    plt.figure()
     for i in range(5):
-        [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = setup()
+        [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = setup(2,nPart,nCell)
     #    plt.plot(np.pi/pt[1:])
         w2 = np.pi/pt[1]
         a = pt[1:]-pt[0:-1]
@@ -448,13 +452,13 @@ if __name__ == "__main__":
         vals[0].append(w)
         vals[1].append(g)
         vals[2].append(a_n)
-        data.append(fh)
-        plt.plot(tArr,fh)
+#        data.append(fh)
+#        plt.plot(tArr,fh)
     
-    plt.plot(tArr, np.mean(data,0), color='k', lw=1.5)
-    plt.xlabel("Time [Normalised]")
-    plt.ylabel("First harmonic amplitude [Normalised]")
-    plt.yscale('log')
+#    plt.plot(tArr, np.mean(data,0), color='k', lw=1.5)
+#    plt.xlabel("Time [Normalised]")
+#    plt.ylabel("First harmonic amplitude [Normalised]")
+#    plt.yscale('log')
     
     W = np.mean(vals[0])
     dW = standardError(vals[0])
@@ -462,9 +466,60 @@ if __name__ == "__main__":
     dG = standardError(vals[1])
     A_n = np.mean(vals[2])
     dA_n = standardError(vals[2])
-    print("w = ",W," +/- ",dW)    
-    print("g = ",G," +/- ",dG)
-    print("A_n = ",A_n," +/- ",dA_n)
+#    print("w = ",W," +/- ",dW)    
+#    print("g = ",G," +/- ",dG)
+#    print("A_n = ",A_n," +/- ",dA_n)
+    return [W, dW, G, dG, A_n, dA_n]
+    
+ 
+ 
+####################################################################
+   
+if __name__ == "__main__":
+    dataNC=[[],[],[],[],[],[]]
+    dataNP=[[],[],[],[],[],[]]
+#    n_cell = [140]
+    n_cell = [20,40,60,80,100,120,140,160,180,200]
+    n_part = [1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000]
+    for nc in n_cell:
+        print("\n********************************************")
+        print("N_part = ",10000,", N_cell = ",nc)
+        print("********************************************\n")
+        [W, dW, G, dG, A_n, dA_n] = run5Analysis(nc,10000)
+        dataNC[0].append(W)
+        dataNC[1].append(dW)
+        dataNC[2].append(G)
+        dataNC[3].append(dG)
+        dataNC[4].append(A_n)
+        dataNC[5].append(dA_n)
+#    plt.figure()
+#    plt.plot(n_cell,dataNC[0])
+    fileData = ["N_cell",n_cell,"W", dataNC[0], "dW", dataNC[1], "G", dataNC[2], "dG", dataNC[3], "A_n", dataNC[4], "dA_n", dataNC[5]]
+    file = open('dataNC.csv', 'w') 
+    writer = csv.writer(file)
+    writer.writerows([[x] for x in fileData])
+    file.close()
+    
+    for nparts in n_part:
+        print("\n********************************************")
+        print("N_part = ",nparts,", N_cell = ",20)
+        print("********************************************\n")
+
+        [W, dW, G, dG, A_n, dA_n] = run5Analysis(20,nparts)
+        dataNP[0].append(W)
+        dataNP[1].append(dW)
+        dataNP[2].append(G)
+        dataNP[3].append(dG)
+        dataNP[4].append(A_n)
+        dataNP[5].append(dA_n)
+#    plt.figure()
+#    plt.plot(n_cell,dataNC[0])
+    fileData = ["N_part",n_part,"W", dataNP[0], "dW", dataNP[1], "G", dataNP[2], "dG", dataNP[3], "A_n", dataNP[4], "dA_n", dataNP[5]]
+    file = open('dataNP.csv', 'w') 
+    writer = csv.writer(file)
+    writer.writerows([[x] for x in fileData])
+    file.close()
+        
         
     
     
