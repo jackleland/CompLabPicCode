@@ -433,10 +433,10 @@ def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
     plt.ioff() # This so that the windows stay open
     plt.show()
     
-def run5Analysis(nCell, nPart):
+def runNAnalysis(nCell, nPart, N=5):
     vals = [[],[],[]]
 #    plt.figure()
-    for i in range(5):
+    for i in range(N):
         [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = setup(2,nPart,nCell)
     #    plt.plot(np.pi/pt[1:])
         w2 = np.pi/pt[1]
@@ -479,13 +479,13 @@ if __name__ == "__main__":
     dataNC=[[],[],[],[],[],[]]
     dataNP=[[],[],[],[],[],[]]
 #    n_cell = [140]
-    n_cell = [20,40,60,80,100,120,140,160,180,200]
+    n_cell = [20,40,60,80,100,120,140,160,180,200,220,240]
     n_part = [1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000]
     for nc in n_cell:
         print("\n********************************************")
         print("N_part = ",10000,", N_cell = ",nc)
         print("********************************************\n")
-        [W, dW, G, dG, A_n, dA_n] = run5Analysis(nc,10000)
+        [W, dW, G, dG, A_n, dA_n] = runNAnalysis(nc,10000,10)
         dataNC[0].append(W)
         dataNC[1].append(dW)
         dataNC[2].append(G)
@@ -495,7 +495,7 @@ if __name__ == "__main__":
 #    plt.figure()
 #    plt.plot(n_cell,dataNC[0])
     fileData = ["N_cell",n_cell,"W", dataNC[0], "dW", dataNC[1], "G", dataNC[2], "dG", dataNC[3], "A_n", dataNC[4], "dA_n", dataNC[5]]
-    file = open('dataNC.csv', 'w') 
+    file = open('dataNC1.csv', 'w') 
     writer = csv.writer(file)
     writer.writerows([[x] for x in fileData])
     file.close()
@@ -505,7 +505,7 @@ if __name__ == "__main__":
         print("N_part = ",nparts,", N_cell = ",20)
         print("********************************************\n")
 
-        [W, dW, G, dG, A_n, dA_n] = run5Analysis(20,nparts)
+        [W, dW, G, dG, A_n, dA_n] = runNAnalysis(20,nparts,10)
         dataNP[0].append(W)
         dataNP[1].append(dW)
         dataNP[2].append(G)
@@ -515,7 +515,7 @@ if __name__ == "__main__":
 #    plt.figure()
 #    plt.plot(n_cell,dataNC[0])
     fileData = ["N_part",n_part,"W", dataNP[0], "dW", dataNP[1], "G", dataNP[2], "dG", dataNP[3], "A_n", dataNP[4], "dA_n", dataNP[5]]
-    file = open('dataNP.csv', 'w') 
+    file = open('dataNP1.csv', 'w') 
     writer = csv.writer(file)
     writer.writerows([[x] for x in fileData])
     file.close()

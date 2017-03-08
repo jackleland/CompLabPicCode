@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 
+# standard function to print fit parameters
+def printParams(guess,popt,pcov,label=""):
+    print("PARAMETERS FOR " + label)
+    print("Our initial guess is ", guess)
+    for i in range(len(popt)):
+        print ("Parameter",i,":",popt[i],"+/-",np.sqrt(pcov[i][i]))
+    	
+    print("Fit parameters : ", popt)
+    print("Fit standard deviations : ", np.sqrt(np.diag(pcov)))
+#    print("R^2 = ", icf.r_squared(ydatafit, yfit))
+    print("\n")
+
 # This function will generate a perfect Gaussian 
 def gaussian(x, *params):
     A = params[0]
@@ -86,8 +98,7 @@ def polyGaussian6(x, *params):
 def exponential(x, *params):
     a = params[0]
     b = params[1]
-    c = params[2]
-    return a*np.exp(b*x) + c
+    return a*np.exp(b*x)
     
 def linear(x, *params):
     m = params[0]
