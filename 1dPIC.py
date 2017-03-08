@@ -8,6 +8,7 @@ import scipy.signal as spy
 from scipy.optimize import curve_fit
 import ffunctions as ff
 import csv 
+import IO
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
 
@@ -47,55 +48,71 @@ def rk4step(f, y0, dt, args=()):
 
     return y0 + (k1 + 2.*k2 + 2.*k3 + k4)*dt / 6.
 
-def calc_density(position, ncells, L):
-    """ Calculate charge density given particle positions
+
+def calc_density(position, ncells, L, mode=0):
+    """ Optimised method for calculating charge density given 
+    particle positions.
     
-    Input
+    INPUT
       position  - Array of positions, one for each particle
                   assumed to be between 0 and L
       ncells    - Number of cells
       L         - Length of the domain
+      mode      - Mode of iteration, with options of 
+          0 (default)   - using np.where (fastest)
+          1             - using python loops
+          2             - using np.bincount
 
-    Output
+    OUTPUT
       density   - contains 1 if evenly distributed
     """
-    # This is a crude method and could be made more efficient
     
     density = np.zeros([ncells])
     nparticles = len(position)
     
     dx = L / ncells       # Uniform cell spacing
-
     pos = np.divide(position, dx)
-    
-    for i in range(ncells):
-        j = (i+1)%ncells
-        sumrange = np.where( (pos >= i) & (pos < i+1) )
-        density[i] = density[i] + sum(pos[sumrange] ) - i*len(sumrange[0])
-        density[j] = density[j] + (i+1)*len(sumrange[0]) - sum(pos[sumrange] )
-#    cellnum = floor(pos).astype(int)
-#    relpos = pos - cellnum
-#    relposinv = 1 - relpos
-#    
-#    # counts the number of particles in each cell and allows them to be summed over
-#    # as the pos list is sorted. This falls down if either end cell is empty.
-#    counts = bincount(cellnum)
-#        
-#    p_hi = 0
-#    p_lo = 0
-#    
-#    for i in range(ncells):
-#        p_lo = p_hi
-#        p_hi = p_hi + counts[i]
-#        # not using += because it is slower
-#        density[i] = density[i] + sum(relposinv[p_lo:p_hi])
-#        density[(i+1)%ncells] = density[(i+1)%ncells] + sum(relpos[p_lo:p_hi])
-    
-
+        
+    if (mode == 1):
+        # original algorithm
+        for p in pos:    # Loop over all the particles, converting position into a cell number
+            plower = int(p)        # Cell to the left (rounding down)
+            offset = p - plower    # Offset from the left
+            density[plower] += 1. - offset
+            density[(plower + 1) % ncells] += offset
+        
+    elif (mode == 2):
+        # first optimised algorithm using np.bincount
+        cellnum = floor(pos).astype(int)
+        relpos = pos - cellnum
+        relposinv = 1 - relpos
+        
+        # counts the number of particles in each cell and allows them to be summed over
+        # as the pos list is sorted. This falls down if either end cell is empty.
+        counts = bincount(cellnum)
+            
+        p_hi = 0
+        p_lo = 0
+        
+        for i in range(ncells):
+            p_lo = p_hi
+            p_hi = p_hi + counts[i]
+            # not using += because it is slower
+            density[i] = density[i] + sum(relposinv[p_lo:p_hi])
+            density[(i+1)%ncells] = density[(i+1)%ncells] + sum(relpos[p_lo:p_hi])
+            
+    else:
+        # second optimised algorithm using np.where
+        for i in range(ncells):
+            j = (i+1)%ncells
+            sumrange = np.where( (pos >= i) & (pos < i+1) )
+            density[i] = density[i] + sum(pos[sumrange] ) - i*len(sumrange[0])
+            density[j] = density[j] + (i+1)*len(sumrange[0]) - sum(pos[sumrange] )
         
     # nparticles now distributed amongst ncells
     density *= float(ncells) / float(nparticles)  # Make average density equal to 1
     return density
+
 
 def periodic_interp(y, x):
     """
@@ -282,6 +299,7 @@ class Summary:
 # 
 # Functions to create the initial conditions
 #
+####################################################################
 
 def landau(npart, L, alpha=0.2):
     """
@@ -331,10 +349,8 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
         ncells = 20
         npart = 200000
         pos, vel = landau(npart, L)
-    elif (mode == 2):
+    else :
         # Landau damping custom mode
-        pos, vel = landau(npart, L)
-    else:
         pos, vel = landau(npart, L)
 
     isNoiseFound = False
@@ -361,7 +377,7 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
         isNoiseFound = (firstMin(fh[peaks]) is not None)
         
     
-    # Limit to landau damping regime
+    # Set limit to landau damping regime
     cutoffPIndex = firstMin(fh[peaks])+1
     cutoff = peaks[0][cutoffPIndex]
 
@@ -403,7 +419,10 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
 #    plt.ioff() # This so that the windows stay open
 #    plt.show()
     return [tArr, fh, endtime-begintime, avNoise, avNoiseD, lPeakTimes, popt, pcov, chi ]
-    
+
+####################################################################
+#                       Simulation Timing                          #
+####################################################################    
 
 def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
     data = [[],[]]
@@ -433,7 +452,13 @@ def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
     plt.ioff() # This so that the windows stay open
     plt.show()
     
+####################################################################
+#                        Main Running Script                       #
+#################################################################### 
+
 def runNAnalysis(nCell, nPart, N=5):
+'''Run simulation N times with a given nCell & nPart and then return
+   the values and standard errors for Omega, Gamma and Noise Amplitude'''
     vals = [[],[],[]]
 #    plt.figure()
     for i in range(N):
@@ -478,7 +503,6 @@ def runNAnalysis(nCell, nPart, N=5):
 if __name__ == "__main__":
     dataNC=[[],[],[],[],[],[]]
     dataNP=[[],[],[],[],[],[]]
-#    n_cell = [140]
     n_cell = [20,40,60,80,100,120,140,160,180,200,220,240]
     n_part = [1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000]
     for nc in n_cell:
@@ -494,11 +518,10 @@ if __name__ == "__main__":
         dataNC[5].append(dA_n)
 #    plt.figure()
 #    plt.plot(n_cell,dataNC[0])
+        
+    # save data to an output csv file
     fileData = ["N_cell",n_cell,"W", dataNC[0], "dW", dataNC[1], "G", dataNC[2], "dG", dataNC[3], "A_n", dataNC[4], "dA_n", dataNC[5]]
-    file = open('dataNC1.csv', 'w') 
-    writer = csv.writer(file)
-    writer.writerows([[x] for x in fileData])
-    file.close()
+    IO.writeCSVFile('dataNC1.csv',fileData)
     
     for nparts in n_part:
         print("\n********************************************")
@@ -514,11 +537,10 @@ if __name__ == "__main__":
         dataNP[5].append(dA_n)
 #    plt.figure()
 #    plt.plot(n_cell,dataNC[0])
+        
+    # save data to an output csv file
     fileData = ["N_part",n_part,"W", dataNP[0], "dW", dataNP[1], "G", dataNP[2], "dG", dataNP[3], "A_n", dataNP[4], "dA_n", dataNP[5]]
-    file = open('dataNP1.csv', 'w') 
-    writer = csv.writer(file)
-    writer.writerows([[x] for x in fileData])
-    file.close()
+    IO.writeCSVFile('dataNP1.csv',fileData)
         
         
     
