@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
+# can't import normally becuase name starts with 1
 PIC = __import__('1dPIC')
-#from PIC import setup
 import IO
 import numpy as np
 import matplotlib.pyplot as plt
@@ -59,37 +59,39 @@ def runNAnalysis(nCell, nPart, N=5, length=4.*np.pi):
 #                       Simulation Timing                          #
 ####################################################################    
 
-def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
+def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000,plotFl=False):
     data = [[],[]]
     for i in range(n):
         [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = PIC.setup(2,scalefactor*(i+1),Ncell)
         data[0].append(scalefactor*(i+1))
         data[1].append(time)
-    
-#    plt.figure()
-#    plt.plot(data[0],data[1])
-#    plt.xlabel("$N_{part}$")
-#    plt.ylabel("Simulation Time (seconds)")  
-#    plt.title("Simulation Time as a Function of $N_{part}$")
-#    plt.ioff() # This so that the windows stay open
-#    plt.show()
-    IO.writeCSVFile('dataT-Np-Cy.csv',data)
+        
+    if plotFl:
+        plt.figure()
+        plt.plot(data[0],data[1])
+        plt.xlabel("$N_{part}$")
+        plt.ylabel("Simulation Time (seconds)")  
+        plt.title("Simulation Time as a Function of $N_{part}$")
+        plt.ioff() # This so that the windows stay open
+        plt.show()
+    IO.writeCSVFile('dataT-Np-Py2.csv',data)
 
     
-def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
+def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5,plotFl=False):
     data = [[],[]]
     for i in range(n):
         [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = PIC.setup(2,Npart,scalefactor*(i+1)) 
         data[0].append(scalefactor*(i+1))
         data[1].append(time)
-    
-#    plt.figure()
-#    plt.plot(data[0],data[1])
-#    plt.xlabel("$N_{cell}$")
-#    plt.ylabel("Simulation Time (seconds)")   
-#    plt.title("Simulation Time as a Function of $N_{cell}$")
-#    plt.ioff() # This so that the windows stay open
-#    plt.show()
+        
+    if plotFl:
+        plt.figure()
+        plt.plot(data[0],data[1])
+        plt.xlabel("$N_{cell}$")
+        plt.ylabel("Simulation Time (seconds)")   
+        plt.title("Simulation Time as a Function of $N_{cell}$")
+        plt.ioff() # This so that the windows stay open
+        plt.show()
     IO.writeCSVFile('dataT-Nc-Cy.csv',data)
     
     

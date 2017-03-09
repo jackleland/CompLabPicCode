@@ -83,7 +83,7 @@ fit1 = ff.squareRoot(N[0:6],*popt)
 
 plt.errorbar(logN,logA,dlogA)
 #plt.plot(np_data[0][0:6],np_data[5][0:6])
-plt.plot(logN[0:6],fit)
+plt.plot(logN[0:5],fit)
 plt.xlabel(r'Log(Number of particles) ($N_{part}$)')
 plt.ylabel(r'Log(Mean noise amplitude) ($\bar{A}_N$)')
 #plt.xscale('log')
