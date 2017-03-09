@@ -7,8 +7,7 @@ import time as t
 import scipy.signal as spy
 from scipy.optimize import curve_fit
 import ffunctions as ff
-import csv 
-import IO
+import cOptimisation
 
 import matplotlib.pyplot as plt # Matplotlib plotting library
 
@@ -83,13 +82,13 @@ def calc_density(position, ncells, L, mode=0):
         
     elif (mode == 2):
         # first optimised algorithm using np.bincount
-        cellnum = floor(pos).astype(int)
+        cellnum = np.floor(pos).astype(int)
         relpos = pos - cellnum
         relposinv = 1 - relpos
         
         # counts the number of particles in each cell and allows them to be summed over
         # as the pos list is sorted. This falls down if either end cell is empty.
-        counts = bincount(cellnum)
+        counts = np.bincount(cellnum)
             
         p_hi = 0
         p_lo = 0
@@ -171,7 +170,9 @@ def pic(f, ncells, L):
     pos = ((pos % L) + L) % L
     
     # Calculate number density, normalised so 1 when uniform
-    density = calc_density(pos, ncells, L)
+    # can choose to use the python function or the cython function
+    density = np.array(cOptimisation.calc_density(pos, ncells, L))
+#    density = calc_density(pos, ncells, L, 0)
     
     # Subtract ion density to get total charge density
     rho = density - 1.
@@ -334,9 +335,35 @@ def twostream(npart, L, vbeam=2):
 
 ####################################################################
 
-def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
-    # Generate initial condition
-    #
+def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi, plotVideo=False, plotFH=False):
+    """ 
+    Optimised method for calculating charge density given 
+    particle positions.
+    
+    INPUT
+      mode          - Mode of operation, consisting of:
+          0             - 2-stream instability
+          1 (default)   - landau with set values
+          2             - landau with custom Npart, Ncell and L
+      npart         - Number of particles
+      ncells        - Number of cells
+      L             - Length of the domain
+      plotVideo     - Boolean flagging time evolution plot for each simulation
+      plotFH        - Boolean flagging FH Analysis plot for each simulation
+
+    OUTPUT
+      tArr          - Time step array
+      fh            - First harmonic amplitude array
+      time          - Simulation time (seconds)
+      avNoise       - Average noise amplitude (A_N)
+      avNoiseD      - Standard error in A_N
+      lPeakTimes    - Time position of FH peaks
+      popt          - Paramters for damping fit
+      pcov          - Covariance matrix for 'popt'
+      chi           - Chi^2 value of fit
+    """
+
+    # simulation type dictated by mode parameter
     if (mode == 0):
         # 2-stream instability mode
         L = 100
@@ -358,13 +385,17 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     # repeat run until a noise region is found successfully
     while (not isNoiseFound):
         # Create some output classes
-#        p = Plot(pos, vel, ncells, L) # This displays an animated figure    
-        s = Summary()                 # Calculates, stores and prints summary info
+        s = Summary() # Calculates, stores and prints summary info
+        if plotVideo:
+            p = Plot(pos, vel, ncells, L) # This displays an animated figure
+            outputs = [s,p]
+        else:
+            outputs = [s]                
         
         # Run the simulation
         begintime = t.clock()
         pos, vel = run(pos, vel, L, ncells, 
-                       out=[s],                      # These are called each output
+                       out=outputs,                      # These are called each output
                        output_times=np.linspace(0.,20,100)) # The times to output
         endtime = t.clock()
         
@@ -381,168 +412,54 @@ def setup(mode=1, npart=10000, ncells=20, L = 4.*np.pi):
     cutoffPIndex = firstMin(fh[peaks])+1
     cutoff = peaks[0][cutoffPIndex]
 
-    lPeaks = peaks[0][0:cutoffPIndex]
-    lPeaks = np.insert(lPeaks,0,0)
+    lPeaks = peaks[0][0:cutoffPIndex] # find index position of peaks
+    lPeaks = np.insert(lPeaks,0,0) # insert first peak
     lPeakTimes = tArr[lPeaks]
+    
+    # divide into regions
     dampingRegion = fh[0:cutoff]
     noiseRegion = fh[cutoff:] 
+    
+    # average the noise
     avNoise = np.mean(noiseRegion)
     avNoiseD = np.std(noiseRegion)/np.sqrt(len(noiseRegion))
     avNoiseFit = np.zeros(len(noiseRegion))+avNoise
     
-    # Fitting curve to peaks
+    # Fitting exponential curve to peaks
     guess = [1,1]
     popt, pcov = curve_fit(ff.exponential,tArr[lPeaks],fh[lPeaks],p0=guess)
     fit  = ff.exponential(tArr[0:cutoff+1],*popt)
     ff.printParams(guess,popt,pcov,"Landau Damping Rate")
     
+    # caclulate chi^2 value
     chi = np.sum((fh[lPeaks] - fit[lPeaks])**2/fit[lPeaks])
     
-    # Summary stores an array of the first-harmonic amplitude
-    # Make a semilog plot to see exponential damping
-#    plt.figure()
-#    # plot damping curve
-#    plt.plot(tArr, fh, color='b')    
-#    # plot position of peaks in damping region
-#    plt.plot(tArr[lPeaks],fh[lPeaks],'x')
-#    # plot fit for daming region
-#    plt.plot(tArr[0:cutoff+1],fit,color='g')
-#    # plot average noise in noise region
-#    plt.plot(tArr[cutoff:],avNoiseFit,color='g')
-#    # plot cutoff point between regions
-#    plt.axvline(tArr[cutoff],linewidth=1, color='r')
-#    
-#    plt.xlabel("Time [Normalised]")
-#    plt.ylabel("First harmonic amplitude [Normalised]")
-#    plt.yscale('log')
-#    
-#    plt.ioff() # This so that the windows stay open
-#    plt.show()
+    # make plot if parameter option plotFH is true
+    if plotFH:
+        # Make a semilog plot to see exponential damping
+        plt.figure()
+        # plot damping curve
+        plt.plot(tArr, fh, color='b')    
+        # plot position of peaks in damping region
+        plt.plot(tArr[lPeaks],fh[lPeaks],'x')
+        # plot fit for daming region
+        plt.plot(tArr[0:cutoff+1],fit,color='g')
+        # plot average noise in noise region
+        plt.plot(tArr[cutoff:],avNoiseFit,color='g')
+        # plot cutoff point between regions
+        plt.axvline(tArr[cutoff],linewidth=1, color='r')
+        
+        plt.xlabel("Time [Normalised]")
+        plt.ylabel("First harmonic amplitude [Normalised]")
+        plt.yscale('log')
+        
+        plt.ioff() # This so that the windows stay open
+        plt.show()
+        
     return [tArr, fh, endtime-begintime, avNoise, avNoiseD, lPeakTimes, popt, pcov, chi ]
 
-####################################################################
-#                       Simulation Timing                          #
-####################################################################    
 
-def repeatedNpartRuns(n=20,Ncell=20,scalefactor=5000):
-    data = [[],[]]
-    for i in range(n):
-        data[0].append(scalefactor*(i+1))
-        data[1].append(setup(2,scalefactor*(i+1),Ncell))
     
-    plt.figure()
-    plt.plot(data[0],data[1])
-    plt.xlabel("$N_{part}$")
-    plt.ylabel("Simulation Time (seconds)")  
-    plt.title("Simulation Time as a Function of $N_{part}$")
-    plt.ioff() # This so that the windows stay open
-    plt.show()
-    
-def repeatedNcellRuns(n=20,Npart=10000,scalefactor=5):
-    data = [[],[]]
-    for i in range(n):
-        data[0].append(scalefactor*(i+1))
-        data[1].append(setup(2,Npart,scalefactor*(i+1)))
-    
-    plt.figure()
-    plt.plot(data[0],data[1])
-    plt.xlabel("$N_{cell}$")
-    plt.ylabel("Simulation Time (seconds)")   
-    plt.title("Simulation Time as a Function of $N_{cell}$")
-    plt.ioff() # This so that the windows stay open
-    plt.show()
-    
-####################################################################
-#                        Main Running Script                       #
-#################################################################### 
-
-def runNAnalysis(nCell, nPart, N=5):
-'''Run simulation N times with a given nCell & nPart and then return
-   the values and standard errors for Omega, Gamma and Noise Amplitude'''
-    vals = [[],[],[]]
-#    plt.figure()
-    for i in range(N):
-        [tArr, fh, time, a_n, da_n, pt, params, cov, chi] = setup(2,nPart,nCell)
-    #    plt.plot(np.pi/pt[1:])
-        w2 = np.pi/pt[1]
-        a = pt[1:]-pt[0:-1]
-        b = a[np.where(a > np.mean(a)*0.8)]
-        w = (np.pi)/(np.mean(b))
-        dw = np.std(b)/np.sqrt(len(b))
-        g = params[1]
-        dg = np.sqrt(cov[1][1])
-#        print("w = ",w," +/- ",dw)    
-#        print("g = ",g," +/- ",dg)
-#        print("A_n = ",A_n," +/- ",dA_n)
-        vals[0].append(w)
-        vals[1].append(g)
-        vals[2].append(a_n)
-#        data.append(fh)
-#        plt.plot(tArr,fh)
-    
-#    plt.plot(tArr, np.mean(data,0), color='k', lw=1.5)
-#    plt.xlabel("Time [Normalised]")
-#    plt.ylabel("First harmonic amplitude [Normalised]")
-#    plt.yscale('log')
-    
-    W = np.mean(vals[0])
-    dW = standardError(vals[0])
-    G = np.mean(vals[1])
-    dG = standardError(vals[1])
-    A_n = np.mean(vals[2])
-    dA_n = standardError(vals[2])
-#    print("w = ",W," +/- ",dW)    
-#    print("g = ",G," +/- ",dG)
-#    print("A_n = ",A_n," +/- ",dA_n)
-    return [W, dW, G, dG, A_n, dA_n]
-    
- 
- 
-####################################################################
-   
-if __name__ == "__main__":
-    dataNC=[[],[],[],[],[],[]]
-    dataNP=[[],[],[],[],[],[]]
-    n_cell = [20,40,60,80,100,120,140,160,180,200,220,240]
-    n_part = [1000,2000,5000,10000,20000,50000,100000,200000,500000,1000000]
-    for nc in n_cell:
-        print("\n********************************************")
-        print("N_part = ",10000,", N_cell = ",nc)
-        print("********************************************\n")
-        [W, dW, G, dG, A_n, dA_n] = runNAnalysis(nc,10000,10)
-        dataNC[0].append(W)
-        dataNC[1].append(dW)
-        dataNC[2].append(G)
-        dataNC[3].append(dG)
-        dataNC[4].append(A_n)
-        dataNC[5].append(dA_n)
-#    plt.figure()
-#    plt.plot(n_cell,dataNC[0])
-        
-    # save data to an output csv file
-    fileData = ["N_cell",n_cell,"W", dataNC[0], "dW", dataNC[1], "G", dataNC[2], "dG", dataNC[3], "A_n", dataNC[4], "dA_n", dataNC[5]]
-    IO.writeCSVFile('dataNC1.csv',fileData)
-    
-    for nparts in n_part:
-        print("\n********************************************")
-        print("N_part = ",nparts,", N_cell = ",20)
-        print("********************************************\n")
-
-        [W, dW, G, dG, A_n, dA_n] = runNAnalysis(20,nparts,10)
-        dataNP[0].append(W)
-        dataNP[1].append(dW)
-        dataNP[2].append(G)
-        dataNP[3].append(dG)
-        dataNP[4].append(A_n)
-        dataNP[5].append(dA_n)
-#    plt.figure()
-#    plt.plot(n_cell,dataNC[0])
-        
-    # save data to an output csv file
-    fileData = ["N_part",n_part,"W", dataNP[0], "dW", dataNP[1], "G", dataNP[2], "dG", dataNP[3], "A_n", dataNP[4], "dA_n", dataNP[5]]
-    IO.writeCSVFile('dataNP1.csv',fileData)
-        
-        
     
     
     

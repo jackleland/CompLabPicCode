@@ -100,6 +100,23 @@ def exponential(x, *params):
     b = params[1]
     return a*np.exp(b*x)
     
+def powerLaw(x, *params):
+    a = params[0]
+    b = params[1]
+    c = params[2]
+    return a*(x**b) + c
+    
+def inverse(x, *params):
+    a = params[0]
+    b = params[1]
+    c = params[2]
+    return np.divide(a,(x+b)) + c
+    
+def squareRoot(x, *params):
+    a = params[0]
+    b = params[1]
+    return a*np.sqrt(x) + b
+    
 def linear(x, *params):
     m = params[0]
     c = params[1]
